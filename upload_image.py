@@ -19,7 +19,7 @@ ROBOFLOW_MODELS = {
         "confidence_threshold": 0.5
     },
     "model_2": {
-        "id": "​​military-f5tbj/1",
+         "id": "​​military-f5tbj/1",
         "use_case": "For military equipments detection",
         "confidence_threshold": 0.5
     },

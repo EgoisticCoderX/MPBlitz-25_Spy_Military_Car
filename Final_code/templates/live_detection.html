@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Live Detection</title>
+  <style>
+    body{margin:0;font-family:Arial;background:#111;color:#eee}
+    #video{width:100%;max-height:75vh;background:#000}
+    .controls{display:flex;flex-wrap:wrap;gap:10px;padding:10px;background:#222}
+    .chk{display:flex;align-items:center;gap:5px}
+    .chk input{transform:scale(1.2);cursor:pointer}
+  </style>
+</head>
+<body>
+<video id="video" autoplay muted></video>
+<div class="controls">
+  <button id="toggleBtn">Toggle Detection</button>
+  {% for key, meta in models.items() %}
+  <div class="chk">
+    <input type="checkbox" id="{{ key }}" {% if key in active %}checked{% endif %}>
+    <label for="{{ key }}">{{ meta.name }}</label>
+  </div>
+  {% endfor %}
+</div>
+
+<script>
+const video = document.getElementById('video');
+video.src = "{{ url_for('video_feed') }}";
+
+document.getElementById('toggleBtn').onclick = async () =>
+  await fetch('/toggle_detection', {method:'POST'});
+
+document.querySelectorAll('.chk input').forEach(cb =>
+  cb.onchange = async () => {
+    await fetch('/toggle_model', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({model_key: cb.id})
+    });
+  });
+</script>
+</body>
+</html>
