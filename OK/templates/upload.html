@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Military Object Detection Upload</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            font-family: 'Segoe UI', 'Arial', sans-serif;
+            margin: 0; padding: 0;
+            min-height: 100vh;
+            background: url('https://www.transparenttextures.com/patterns/camouflage.png'), #1b2d1b;
+            background-size: 300px 300px;
+            transition: background 0.5s, color 0.5s;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 32px 16px 16px 16px;
+            background: rgba(27,45,27,0.92);
+            border-radius: 18px;
+            box-shadow: 0 8px 32px rgba(0,32,0,0.25);
+            transition: box-shadow 0.5s, background 0.5s;
+            animation: fadeInUp 1.2s cubic-bezier(.23,1.01,.32,1) 0.2s both;
+        }
+        @keyframes fadeInUp {
+            0% { opacity: 0; transform: translateY(40px); }
+            100% { opacity: 1; transform: none; }
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            font-size: 2.7em;
+            color: #7be27a;
+            letter-spacing: 2.5px;
+            text-shadow: 2px 2px 12px #0a1a0a;
+            font-family: 'Share Tech Mono', monospace;
+            animation: pulseText 2.5s infinite alternate;
+        }
+        @keyframes pulseText {
+            0% { text-shadow: 2px 2px 12px #0a1a0a, 0 0 0 #7be27a; }
+            100% { text-shadow: 2px 2px 24px #7be27a, 0 0 16px #7be27a; }
+        }
+        .header p {
+            color: #b0f7a1;
+            font-size: 1.2em;
+            letter-spacing: 1px;
+            margin-top: 8px;
+            text-shadow: 0 1px 8px #0a1a0a;
+        }
+        .upload-form, .results {
+            background: rgba(34, 60, 34, 0.98);
+            padding: 28px 24px 24px 24px;
+            border-radius: 14px;
+            box-shadow: 0 4px 24px rgba(0,32,0,0.18);
+            margin-bottom: 32px;
+            transition: box-shadow 0.4s, background 0.4s;
+            animation: fadeInUp 1.2s cubic-bezier(.23,1.01,.32,1) 0.4s both;
+        }
+        .upload-form {
+            border: 2.5px solid #3fa34d;
+        }
+        .results {
+            border: 2.5px solid #7be27a;
+        }
+        .error {
+            color: #ff4c4c;
+            background: #2a1a1a;
+            padding: 8px 12px;
+            border-radius: 6px;
+            margin-bottom: 18px;
+            font-weight: bold;
+        }
+        .uploaded-img {
+            max-width: 100%;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border: 3px solid #e2e27a;
+            box-shadow: 0 2px 8px #222;
+        }
+        .military-btn {
+            background: linear-gradient(90deg, #3fa34d 60%, #1b2d1b 100%);
+            color: #fff;
+            border: none;
+            padding: 14px 36px;
+            border-radius: 10px;
+            font-size: 1.18em;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            cursor: pointer;
+            box-shadow: 0 4px 16px #0a1a0a;
+            transition: background 0.3s, color 0.3s, box-shadow 0.3s, transform 0.2s;
+            position: relative;
+            overflow: hidden;
+        }
+        .military-btn:before {
+            content: '';
+            position: absolute;
+            left: -75%;
+            top: 0;
+            width: 50%;
+            height: 100%;
+            background: linear-gradient(120deg, rgba(123,226,122,0.25) 0%, rgba(123,226,122,0.5) 100%);
+            transform: skewX(-20deg);
+            transition: left 0.5s;
+        }
+        .military-btn:hover:before {
+            left: 120%;
+        }
+        .military-btn:hover {
+            background: linear-gradient(90deg, #1b2d1b 60%, #3fa34d 100%);
+            color: #7be27a;
+            box-shadow: 0 8px 32px #3fa34d;
+            transform: translateY(-2px) scale(1.04);
+        }
+        .mode-toggle {
+            position: fixed;
+            top: 18px;
+            right: 24px;
+            z-index: 100;
+            background: #232b2b;
+            color: #e2e27a;
+            border: 2px solid #e2e27a;
+            border-radius: 50%;
+            width: 48px; height: 48px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.5em;
+            cursor: pointer;
+            box-shadow: 0 2px 8px #222;
+            transition: background 0.3s, color 0.3s;
+        }
+        .mode-toggle:hover {
+            background: #e2e27a;
+            color: #232b2b;
+        }
+        /* Loading screen styles */
+        #loading-screen {
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background: linear-gradient(135deg, #232b2b 80%, #4b5320 100%);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            transition: opacity 0.7s;
+        }
+        .loader {
+            width: 90px; height: 90px;
+            border: 8px solid #e2e27a;
+            border-top: 8px solid #4b5320;
+            border-radius: 50%;
+            animation: spin 1.2s linear infinite;
+            margin-bottom: 24px;
+            box-shadow: 0 0 24px #e2e27a;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .loader-crosshair {
+            position: absolute;
+            width: 90px; height: 90px;
+            pointer-events: none;
+        }
+        .loader-crosshair:before, .loader-crosshair:after {
+            content: '';
+            position: absolute;
+            background: #e2e27a;
+        }
+        .loader-crosshair:before {
+            left: 44px; top: 10px; width: 2px; height: 70px;
+        }
+        .loader-crosshair:after {
+            top: 44px; left: 10px; width: 70px; height: 2px;
+        }
+        .loader-text {
+            color: #e2e27a;
+            font-size: 1.5em;
+            font-family: 'Share Tech Mono', monospace;
+            letter-spacing: 2px;
+            text-shadow: 0 2px 8px #222;
+        }
+        /* Table styles */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 12px;
+        }
+        th, td {
+            padding: 10px 8px;
+            text-align: center;
+        }
+        th {
+            background: #4b5320;
+            color: #e2e27a;
+            font-size: 1.1em;
+        }
+        tr:nth-child(even) { background: #2e3b2b; }
+        tr:nth-child(odd) { background: #232b2b; }
+        td {
+            color: #e2e27a;
+        }
+        /* Light mode overrides */
+        body.light-mode {
+            background: url('https://www.transparenttextures.com/patterns/camouflage.png'), #e2e27a;
+            color: #232b2b;
+        }
+        body.light-mode .upload-form, body.light-mode .results {
+            background: rgba(255,255,255,0.95);
+            color: #232b2b;
+        }
+        body.light-mode .header h1 {
+            color: #232b2b;
+            text-shadow: 2px 2px 8px #e2e27a;
+        }
+        body.light-mode .header p {
+            color: #4b5320;
+        }
+        body.light-mode .military-btn {
+            background: linear-gradient(90deg, #e2e27a 60%, #4b5320 100%);
+            color: #232b2b;
+        }
+        body.light-mode .military-btn:hover {
+            background: linear-gradient(90deg, #4b5320 60%, #e2e27a 100%);
+            color: #fff;
+        }
+        body.light-mode .mode-toggle {
+            background: #e2e27a;
+            color: #232b2b;
+            border: 2px solid #232b2b;
+        }
+        body.light-mode .mode-toggle:hover {
+            background: #232b2b;
+            color: #e2e27a;
+        }
+        body.light-mode th {
+            background: #e2e27a;
+            color: #232b2b;
+        }
+        body.light-mode tr:nth-child(even) { background: #f0f0c0; }
+        body.light-mode tr:nth-child(odd) { background: #fffde4; }
+        body.light-mode td {
+            color: #232b2b;
+        }
+        body.light-mode .uploaded-img {
+            border: 3px solid #4b5320;
+            box-shadow: 0 2px 8px #e2e27a;
+        }
+    </style>
+</head>
+<body>
+    <!-- Dynamic Processing Loading Overlay -->
+    <div id="processing-overlay" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(27,45,27,0.98); z-index:99999; align-items:center; justify-content:center; flex-direction:column; transition:background 0.5s;">
+        <div id="processing-animation" style="position:relative; width:110px; height:110px; margin-bottom:24px;">
+            <div class="loader" style="border-color:#7be27a; border-top-color:#3fa34d;"></div>
+            <div class="loader-crosshair"></div>
+            <div id="tick" style="display:none; position:absolute; left:25px; top:35px; width:60px; height:60px;">
+                <svg width="60" height="60">
+                    <circle cx="30" cy="30" r="28" stroke="#7be27a" stroke-width="4" fill="none"/>
+                    <polyline points="16,32 28,44 46,20" style="fill:none;stroke:#7be27a;stroke-width:5;stroke-linecap:round;stroke-linejoin:round;"/>
+                </svg>
+            </div>
+        </div>
+        <div class="loader-text" id="processing-text" style="color:#7be27a; text-shadow:0 2px 8px #0a1a0a; font-size:1.35em; animation: fadeInUp 1.2s cubic-bezier(.23,1.01,.32,1) 0.1s both;">Processing...</div>
+    </div>
+    <!-- Light/Dark Mode Toggle -->
+    <div class="mode-toggle" id="modeToggle" title="Toggle light/dark mode">&#x1F4A1;</div>
+    <div class="container" style="display: flex; flex-direction: row; gap: 32px; align-items: flex-start;">
+        <div style="flex: 2; min-width: 340px;">
+            <div class="header">
+                <h1><span style="font-family:'Share Tech Mono',monospace;">&#x1F52B; MILITARY OBJECT DETECTION</span></h1>
+                <p>Upload an image to scan for threats using all available models.</p>
+            </div>
+            <div class="upload-form">
+                {% if error %}<div class="error">{{ error }}</div>{% endif %}
+                <form method="POST" enctype="multipart/form-data" id="uploadForm">
+                    <input type="file" name="image" accept="image/*" required style="margin-bottom:12px;">
+                    <button type="submit" class="military-btn">&#x1F4E4; Upload &amp; Detect</button>
+                </form>
+            </div>
+            {% if results %}
+            <div class="results">
+                <h2 style="color:#e2e27a; text-shadow:1px 1px 6px #232b2b;">Detection Results</h2>
+                <table>
+                    <tr>
+                        <th>Detection Type</th>
+                        <th>Class</th>
+                        <th>Confidence</th>
+                    </tr>
+                    {% for det_type, dets in results.items() %}
+                        {% for det in dets %}
+                        <tr>
+                            <td>{{ det.detection_type }}</td>
+                            <td>{{ det.class }}</td>
+                            <td>{{ '%.2f'|format(det.confidence) }}</td>
+                        </tr>
+                        {% endfor %}
+                    {% endfor %}
+                </table>
+            </div>
+            {% endif %}
+        </div>
+        <div style="flex: 1.2; min-width: 320px; background:rgba(20,30,20,0.98); border-radius:16px; box-shadow:0 4px 24px #0a1a0a; padding:24px 18px;">
+            <h2 style="color:#7be27a; text-align:center; margin-bottom:18px; font-size:1.3em; letter-spacing:1px;">Comparison View</h2>
+            <div style="display:flex; flex-direction:column; align-items:center; gap:18px;">
+                <div style="width:100%;">
+                    <div style="color:#b0f7a1; font-size:1em; margin-bottom:4px;">Original Image</div>
+                    {% if image_uploaded and preview_img %}
+                        <img src="data:image/jpeg;base64,{{ preview_img }}" alt="Original Image" style="width:100%; border-radius:10px; border:2px solid #7be27a; box-shadow:0 2px 8px #222; margin-bottom:8px;">
+                    {% else %}
+                        <div style="width:100%; aspect-ratio:4/3; background:#232b2b; border-radius:10px; border:2px dashed #7be27a; display:flex; align-items:center; justify-content:center; color:#7be27a; font-size:1.1em;">No Image</div>
+                    {% endif %}
+                </div>
+                <div style="width:100%;">
+                    <div style="color:#e2e27a; font-size:1em; margin-bottom:4px;">Processed Image</div>
+                    {% if processed_img %}
+                        <img src="data:image/jpeg;base64,{{ processed_img }}" alt="Processed Image" style="width:100%; border-radius:10px; border:2px solid #e2e27a; box-shadow:0 2px 8px #222; margin-bottom:8px;">
+                    {% else %}
+                        <div style="width:100%; aspect-ratio:4/3; background:#232b2b; border-radius:10px; border:2px dashed #e2e27a; display:flex; align-items:center; justify-content:center; color:#e2e27a; font-size:1.1em;">No Output</div>
+                    {% endif %}
+                </div>
+            </div>
+            <div style="margin-top:28px;">
+                <div id="progress-bar-container" style="width:100%; background:#232b2b; border-radius:8px; padding:10px 8px; box-shadow:0 2px 8px #111;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                        <span style="color:#7be27a; font-size:1em; font-weight:bold;">Progress</span>
+                        <span id="progress-label" style="color:#e2e27a; font-size:0.98em;"></span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <div id="progress-bar" style="flex:1; height:14px; background:linear-gradient(90deg,#3fa34d,#7be27a); border-radius:7px; transition:width 0.5s; width:0%;"></div>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-top:8px; font-size:0.93em; color:#b0f7a1;">
+                        <span>Soldier</span>
+                        <span>Landmine</span>
+                        <span>Tank</span>
+                        <span>Aircraft</span>
+                        <span>Equipment</span>
+                        <span>Gun</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        // Light/Dark mode toggle
+        const modeToggle = document.getElementById('modeToggle');
+        modeToggle.addEventListener('click', function() {
+            document.body.classList.toggle('light-mode');
+            localStorage.setItem('military-light-mode', document.body.classList.contains('light-mode'));
+        });
+        // Persist mode
+        if(localStorage.getItem('military-light-mode') === 'true') {
+            document.body.classList.add('light-mode');
+        }
+
+        // Simulated model names (update as needed to match your backend)
+        const modelNames = [
+            'Processing with Soldier Model...',
+            'Processing with Landmine Model...',
+            'Processing with Tank Model...',
+            'Processing with Aircraft Model...',
+            'Processing with Equipment Model...',
+            'Processing with Gun Model...'
+        ];
+
+          // Show processing overlay and animate through models
+        function showProcessingOverlay() {
+            const overlay = document.getElementById('processing-overlay');
+            const text = document.getElementById('processing-text');
+            const tick = document.getElementById('tick');
+            overlay.style.display = 'flex';
+            overlay.style.opacity = 0;
+            setTimeout(() => { overlay.style.opacity = 1; }, 10);
+            let i = 0;
+            function nextModel() {
+                if (i >= modelNames.length) {
+                    text.textContent = 'All Models Processed!';
+                    tick.style.display = 'block';
+                    overlay.style.background = 'rgba(34, 60, 34, 0.98)';
+                    setTimeout(() => {
+                        overlay.style.background = 'rgba(27,45,27,0.98)';
+                    }, 800);
+                    return;
+                }
+                text.textContent = modelNames[i];
+                tick.style.display = 'none';
+                overlay.style.background = 'rgba(27,45,27,0.98)';
+                setTimeout(() => {
+                    tick.style.display = 'block';
+                    overlay.style.background = 'rgba(34, 60, 34, 0.98)';
+                    setTimeout(() => {
+                        tick.style.display = 'none';
+                        overlay.style.background = 'rgba(27,45,27,0.98)';
+                        i++;
+                        nextModel();
+                    }, 700);
+                }, 1200);
+            }
+            nextModel();
+        }
+
+        // Progress bar logic
+        const modelSteps = [
+            'Processing with Soldier Model...',
+            'Processing with Landmine Model...',
+            'Processing with Tank Model...',
+            'Processing with Aircraft Model...',
+            'Processing with Equipment Model...',
+            'Processing with Gun Model...'
+        ];
+        function animateProgressBar() {
+            const bar = document.getElementById('progress-bar');
+            const label = document.getElementById('progress-label');
+            let i = 0;
+            function nextStep() {
+                if (i > modelSteps.length) return;
+                bar.style.width = ((i/modelSteps.length)*100) + '%';
+                label.textContent = modelSteps[i-1] || '';
+                if (i < modelSteps.length) {
+                    setTimeout(() => {
+                        i++;
+                        nextStep();
+                    }, 900);
+                } else {
+                    label.textContent = 'All Models Processed!';
+                    bar.style.width = '100%';
+                }
+            }
+            nextStep();
+        }
+
+        // Attach to form submit
+        document.getElementById('uploadForm').addEventListener('submit', function(e) {
+            showProcessingOverlay();
+            animateProgressBar();
+        });
+    </script>
+</body>
+</html>
