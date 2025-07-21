@@ -1,0 +1,309 @@
+#include <WiFi.h>
+#include <ESPAsyncWebServer.h>
+#include <ArduinoJson.h>
+
+// WiFi credentials
+const char* ssid = "MySpyCar";
+const char* password = "123456789";
+
+// LED pin
+const int LED_PIN = 2;  // Built-in LED pin for ESP32
+
+// Async web server
+AsyncWebServer server(80);
+
+// LED state and gun detection state
+bool ledState = false;
+bool gunDetected = false;
+
+// HTML page with gun detection control
+const char* htmlPage = R"(
+<!DOCTYPE html>
+<html>
+<head>
+<title>ESP32 LED Control</title>
+<meta name='viewport' content='width=device-width, initial-scale=1'>
+<style>
+body{font-family:Arial,sans-serif;text-align:center;margin:0;padding:20px;background-color:#f0f0f0;}
+.container{max-width:600px;margin:0 auto;background-color:white;padding:30px;border-radius:10px;box-shadow:0 4px 6px rgba(0,0,0,0.1);}
+h1{color:#333;margin-bottom:30px;}
+.status{font-size:24px;margin:20px 0;padding:15px;border-radius:5px;}
+.led-on{background-color:#4CAF50;color:white;}
+.led-off{background-color:#f44336;color:white;}
+.gun-detected{background-color:#4CAF50;color:white;}
+.gun-not-detected{background-color:#f44336;color:white;}
+button{background-color:#008CBA;color:white;border:none;padding:15px 32px;font-size:16px;margin:10px;cursor:pointer;border-radius:5px;}
+button:hover:not(:disabled){background-color:#007B9A;}
+button:disabled{background-color:#cccccc;cursor:not-allowed;}
+.info{margin-top:30px;padding:15px;background-color:#e7f3ff;border-radius:5px;}
+.controls{margin:20px 0;}
+</style>
+</head>
+<body>
+<div class='container'>
+<h1>ESP32 LED Control</h1>
+<div id='gunStatus' class='status gun-not-detected'>Gun Status: NOT DETECTED</div>
+<div id='ledStatus' class='status led-off'>LED Status: OFF</div>
+<div class='controls'>
+<button id='toggleBtn' onclick='toggleLED()' disabled>Toggle LED</button>
+<button onclick='refreshStatus()'>Refresh Status</button>
+</div>
+<div class='controls'>
+<button onclick='simulateGunDetection()' style='background-color:#ff9800;'>Simulate Gun Detection</button>
+<button onclick='clearGunDetection()' style='background-color:#9e9e9e;'>Clear Gun Detection</button>
+</div>
+<div class='info'>
+<p><strong>Note:</strong> The LED can only be controlled when a gun is detected.</p>
+<p>IP Address: <span id='ip'></span></p>
+</div>
+</div>
+<script>
+function updateStatus(data){
+const gunStatusDiv = document.getElementById('gunStatus');
+const ledStatusDiv = document.getElementById('ledStatus');
+const toggleBtn = document.getElementById('toggleBtn');
+
+// Update gun detection status
+if(data.gunDetected){
+gunStatusDiv.textContent = 'Gun Status: DETECTED';
+gunStatusDiv.className = 'status gun-detected';
+toggleBtn.disabled = false;
+} else {
+gunStatusDiv.textContent = 'Gun Status: NOT DETECTED';
+gunStatusDiv.className = 'status gun-not-detected';
+toggleBtn.disabled = true;
+}
+
+// Update LED status
+if(data.ledState){
+ledStatusDiv.textContent = 'LED Status: ON';
+ledStatusDiv.className = 'status led-on';
+} else {
+ledStatusDiv.textContent = 'LED Status: OFF';
+ledStatusDiv.className = 'status led-off';
+}
+}
+
+function toggleLED(){
+const toggleBtn = document.getElementById('toggleBtn');
+if(toggleBtn.disabled) return;
+
+fetch('/toggle_led', {
+method: 'POST',
+headers: {'Content-Type': 'application/json'}
+})
+.then(response => response.json())
+.then(data => {
+if(data.success) {
+updateStatus(data);
+} else {
+alert(data.message || 'Error: Gun not detected');
+}
+})
+.catch(error => {
+console.error('Error:', error);
+alert('Error toggling LED');
+});
+}
+
+function refreshStatus(){
+fetch('/status')
+.then(response => response.json())
+.then(data => updateStatus(data))
+.catch(error => console.error('Error:', error));
+}
+
+function simulateGunDetection(){
+fetch('/simulate_gun', {method: 'POST'})
+.then(response => response.json())
+.then(data => {
+updateStatus(data);
+alert('Gun detection simulated!');
+})
+.catch(error => console.error('Error:', error));
+}
+
+function clearGunDetection(){
+fetch('/clear_gun', {method: 'POST'})
+.then(response => response.json())
+.then(data => {
+updateStatus(data);
+alert('Gun detection cleared!');
+})
+.catch(error => console.error('Error:', error));
+}
+
+// Initialize
+fetch('/ip')
+.then(response => response.text())
+.then(ip => document.getElementById('ip').textContent = ip);
+
+refreshStatus();
+setInterval(refreshStatus, 5000);
+</script>
+</body>
+</html>
+)";
+
+void setup() {
+    Serial.begin(115200);
+    
+    // Initialize LED pin
+    pinMode(LED_PIN, OUTPUT);
+    digitalWrite(LED_PIN, LOW);
+    
+    // Connect to WiFi
+    WiFi.begin(ssid, password);
+    Serial.print("Connecting to WiFi");
+    
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(1000);
+        Serial.print(".");
+    }
+    
+    Serial.println();
+    Serial.print("Connected to WiFi. IP address: ");
+    Serial.println(WiFi.localIP());
+    
+    // Setup async web server routes
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+        request->send(200, "text/html", htmlPage);
+    });
+    
+    server.on("/toggle_led", HTTP_POST, [](AsyncWebServerRequest *request){
+        DynamicJsonDocument doc(1024);
+        
+        // Check if gun is detected before allowing LED toggle
+        if (!gunDetected) {
+            doc["success"] = false;
+            doc["message"] = "Gun not detected. LED control disabled.";
+            doc["ledState"] = ledState;
+            doc["gunDetected"] = gunDetected;
+            
+            String response;
+            serializeJson(doc, response);
+            
+            request->send(200, "application/json", response);
+            Serial.println("LED toggle attempt blocked: Gun not detected");
+            return;
+        }
+        
+        // Toggle LED state only if gun is detected
+        ledState = !ledState;
+        digitalWrite(LED_PIN, ledState ? HIGH : LOW);
+        
+        doc["success"] = true;
+        doc["ledState"] = ledState;
+        doc["gunDetected"] = gunDetected;
+        doc["message"] = ledState ? "LED turned ON" : "LED turned OFF";
+        
+        String response;
+        serializeJson(doc, response);
+        
+        request->send(200, "application/json", response);
+        Serial.println("LED toggled: " + String(ledState ? "ON" : "OFF"));
+    });
+    
+    server.on("/status", HTTP_GET, [](AsyncWebServerRequest *request){
+        DynamicJsonDocument doc(1024);
+        doc["ledState"] = ledState;
+        doc["gunDetected"] = gunDetected;
+        doc["wifiStatus"] = WiFi.status() == WL_CONNECTED ? "connected" : "disconnected";
+        doc["ip"] = WiFi.localIP().toString();
+        
+        String response;
+        serializeJson(doc, response);
+        
+        request->send(200, "application/json", response);
+    });
+    
+    server.on("/ip", HTTP_GET, [](AsyncWebServerRequest *request){
+        request->send(200, "text/plain", WiFi.localIP().toString());
+    });
+    
+    // Route for Flask application to set gun detection status
+    server.on("/set_gun_status", HTTP_POST, [](AsyncWebServerRequest *request){
+        DynamicJsonDocument doc(1024);
+        
+        if (request->hasParam("detected", true)) {
+            String detectedStr = request->getParam("detected", true)->value();
+            gunDetected = (detectedStr == "true" || detectedStr == "1");
+            
+            // If gun is no longer detected, turn off LED
+            if (!gunDetected && ledState) {
+                ledState = false;
+                digitalWrite(LED_PIN, LOW);
+                Serial.println("Gun detection lost - LED turned OFF");
+            }
+            
+            doc["success"] = true;
+            doc["gunDetected"] = gunDetected;
+            doc["ledState"] = ledState;
+            doc["message"] = gunDetected ? "Gun detected" : "Gun not detected";
+            
+            Serial.println("Gun detection status updated: " + String(gunDetected ? "DETECTED" : "NOT DETECTED"));
+        } else {
+            doc["success"] = false;
+            doc["message"] = "Missing 'detected' parameter";
+        }
+        
+        String response;
+        serializeJson(doc, response);
+        
+        request->send(200, "application/json", response);
+    });
+    
+    // Simulation routes for testing
+    server.on("/simulate_gun", HTTP_POST, [](AsyncWebServerRequest *request){
+        gunDetected = true;
+        
+        DynamicJsonDocument doc(1024);
+        doc["success"] = true;
+        doc["gunDetected"] = gunDetected;
+        doc["ledState"] = ledState;
+        doc["message"] = "Gun detection simulated";
+        
+        String response;
+        serializeJson(doc, response);
+        
+        request->send(200, "application/json", response);
+        Serial.println("Gun detection simulated");
+    });
+    
+    server.on("/clear_gun", HTTP_POST, [](AsyncWebServerRequest *request){
+        gunDetected = false;
+        
+        // Turn off LED when gun detection is cleared
+        if (ledState) {
+            ledState = false;
+            digitalWrite(LED_PIN, LOW);
+        }
+        
+        DynamicJsonDocument doc(1024);
+        doc["success"] = true;
+        doc["gunDetected"] = gunDetected;
+        doc["ledState"] = ledState;
+        doc["message"] = "Gun detection cleared";
+        
+        String response;
+        serializeJson(doc, response);
+        
+        request->send(200, "application/json", response);
+        Serial.println("Gun detection cleared - LED turned OFF");
+    });
+    
+    // Handle CORS for all routes
+    DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
+    DefaultHeaders::Instance().addHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    DefaultHeaders::Instance().addHeader("Access-Control-Allow-Headers", "Content-Type");
+    
+    // Start server
+    server.begin();
+    Serial.println("Async HTTP server started");
+    Serial.println("Gun detection status: " + String(gunDetected ? "DETECTED" : "NOT DETECTED"));
+}
+
+void loop() {
+    // Main loop is free for other tasks since we're using async server
+    delay(100);
+}
