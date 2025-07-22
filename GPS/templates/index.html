@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Military Detection System - ESP32 Integration</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            min-height: 100vh;
+            color: white;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .status-bar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .status-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .status-card.connected {
+            border-color: #2ecc71;
+            background: rgba(46, 204, 113, 0.2);
+            box-shadow: 0 0 20px rgba(46, 204, 113, 0.3);
+        }
+
+        .status-card.disconnected {
+            border-color: #e74c3c;
+            background: rgba(231, 76, 60, 0.2);
+            box-shadow: 0 0 20px rgba(231, 76, 60, 0.3);
+        }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .upload-section {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 15px;
+            padding: 30px;
+        }
+
+        .upload-area {
+            border: 3px dashed rgba(255, 255, 255, 0.3);
+            border-radius: 15px;
+            padding: 40px;
+            text-align: center;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            min-height: 200px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .upload-area:hover {
+            border-color: rgba(255, 255, 255, 0.6);
+            background: rgba(255, 255, 255, 0.05);
+            transform: translateY(-2px);
+        }
+
+        .upload-area.dragover {
+            border-color: #3498db;
+            background: rgba(52, 152, 219, 0.1);
+            transform: scale(1.02);
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .upload-btn {
+            background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 15px;
+            transition: all 0.3s ease;
+        }
+
+        .upload-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(52, 152, 219, 0.3);
+        }
+
+        .upload-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .results-section {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 15px;
+            padding: 30px;
+        }
+
+        .detection-models {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .model-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .model-card:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .model-card.active {
+            border-color: #2ecc71;
+            background: rgba(46, 204, 113, 0.1);
+            box-shadow: 0 0 15px rgba(46, 204, 113, 0.3);
+        }
+
+        .preview-container {
+            grid-column: 1 / -1;
+            margin-top: 30px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 15px;
+            padding: 30px;
+        }
+
+        .preview-image {
+            width: 100%;
+            max-width: 800px;
+            margin: 0 auto;
+            display: block;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .alert-success {
+            background: rgba(46, 204, 113, 0.2);
+            border: 1px solid #2ecc71;
+            color: #2ecc71;
+        }
+
+        .alert-danger {
+            background: rgba(231, 76, 60, 0.2);
+            border: 1px solid #e74c3c;
+            color: #e74c3c;
+        }
+
+        .detection-result {
+            background: rgba(255, 255, 255, 0.05);
+            border-left: 4px solid #e74c3c;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .detection-result.soldier { border-left-color: #2ecc71; }
+        .detection-result.landmine { border-left-color: #e74c3c; }
+        .detection-result.aircraft { border-left-color: #3498db; }
+        .detection-result.tank { border-left-color: #f39c12; }
+        .detection-result.equipment { border-left-color: #9b59b6; }
+        .detection-result.gun { border-left-color: #e67e22; }
+
+        .test-controls {
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        .test-btn {
+            background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 20px;
+            cursor: pointer;
+            margin: 5px;
+            transition: all 0.3s ease;
+        }
+
+        .test-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(243, 156, 18, 0.3);
+        }
+
+        .test-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .stat-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #3498db;
+        }
+
+        @media (max-width: 768px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .detection-models {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎯 Military Detection System</h1>
+            <p>ESP32 Autonomous Bot Integration</p>
+        </div>
+
+        <div class="status-bar">
+            <div class="status-card" id="esp32-status">
+                <h3>🤖 ESP32 Bot Status</h3>
+                <p id="bot-connection">Checking connection...</p>
+                <p id="bot-location">Location: Unknown</p>
+            </div>
+            <div class="status-card">
+                <h3>📡 Detection System</h3>
+                <p>Ready for Analysis</p>
+                <p id="total-detections">Total Detections: 0</p>
+            </div>
+        </div>
+
+        <div class="main-grid">
+            <div class="upload-section">
+                <h2>📷 Image Analysis</h2>
+                <form id="upload-form" enctype="multipart/form-data">
+                    <div class="upload-area" id="upload-area" onclick="document.getElementById('file-input').click()">
+                        <div id="upload-content">
+                            <p>📁 Click to select image</p>
+                            <p>or drag and drop here</p>
+                            <input type="file" id="file-input" name="image" accept="image/*">
+                            <button type="button" class="upload-btn" onclick="document.getElementById('file-input').click()">
+                                Choose Image
+                            </button>
+                        </div>
+                    </div>
+                </form>
+
+                <div class="test-controls">
+                    <button class="test-btn" onclick="testESP32Connection()">Test ESP32 Connection</button>
+                    <button class="test-btn" onclick="sendTestDetection()">Send Test Detection</button>
+                </div>
+            </div>
+
+            <div class="results-section">
+                <h2>🔍 Detection Models</h2>
+                <div class="detection-models">
+                    <div class="model-card">
+                        <h4>👤 Soldier Detection</h4>
+                        <p>4 Models Active</p>
+                    </div>
+                    <div class="model-card">
+                        <h4>💣 Landmine Detection</h4>
+                        <p>1 Model Active</p>
+                    </div>
+                    <div class="model-card">
+                        <h4>✈️ Aircraft Detection</h4>
+                        <p>2 Models Active</p>
+                    </div>
+                    <div class="model-card">
+                        <h4>🚗 Tank Detection</h4>
+                        <p>1 Model Active</p>
+                    </div>
+                    <div class="model-card">
+                        <h4>🔫 Weapon Detection</h4>
+                        <p>2 Models Active</p>
+                    </div>
+                    <div class="model-card">
+                        <h4>⚙️ Military Equipment</h4>
+                        <p>2 Models Active</p>
+                    </div>
+                </div>
+
+                <div id="results-container"></div>
+            </div>
+        </div>
+
+        <div class="preview-container" id="preview-container" style="display: none;">
+            <h2>📊 Analysis Results</h2>
+            <img id="preview-image" class="preview-image" alt="Analysis preview">
+            <div id="detection-stats" class="stats-grid"></div>
+        </div>
+    </div>
+
+    <script>
+        let totalDetections = 0;
+
+        // Check ESP32 status on page load
+        window.onload = function() {
+            checkESP32Status();
+            setInterval(checkESP32Status, 10000); // Check every 10 seconds
+        };
+
+        async function checkESP32Status() {
+            try {
+                const response = await fetch('/esp32_status');
+                const data = await response.json();
+                
+                const statusCard = document.getElementById('esp32-status');
+                const connectionElement = document.getElementById('bot-connection');
+                const locationElement = document.getElementById('bot-location');
+                
+                if (data.connected && data.status) {
+                    statusCard.className = 'status-card connected';
+                    connectionElement.textContent = '🟢 Connected';
+                    if (data.status.lat && data.status.lon) {
+                        locationElement.textContent = `📍 ${data.status.lat.toFixed(6)}, ${data.status.lon.toFixed(6)}`;
+                    }
+                } else {
+                    statusCard.className = 'status-card disconnected';
+                    connectionElement.textContent = '🔴 Disconnected';
+                    locationElement.textContent = 'Location: Unknown';
+                }
+            } catch (error) {
+                console.error('Failed to check ESP32 status:', error);
+                const statusCard = document.getElementById('esp32-status');
+                statusCard.className = 'status-card disconnected';
+                document.getElementById('bot-connection').textContent = '🔴 Connection Error';
+            }
+        }
+
+        async function testESP32Connection() {
+            const button = event.target;
+            const originalText = button.textContent;
+            button.innerHTML = '<span class="loading"></span> Testing...';
+            button.disabled = true;
+
+            try {
+                const response = await fetch('/esp32_status');
+                const data = await response.json();
+                
+                if (data.connected) {
+                    showAlert('✅ ESP32 Bot is connected and responding!', 'success');
+                } else {
+                    showAlert('❌ ESP32 Bot is not responding. Check connection.', 'danger');
+                }
+            } catch (error) {
+                showAlert('❌ Failed to test ESP32 connection: ' + error.message, 'danger');
+            } finally {
+                button.textContent = originalText;
+                button.disabled = false;
+            }
+        }
+
+        async function sendTestDetection() {
+            const button = event.target;
+            const originalText = button.textContent;
+            button.innerHTML = '<span class="loading"></span> Sending...';
+            button.disabled = true;
+
+            try {
+                const response = await fetch('/test_detection');
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert('🎯 Test detection sent to ESP32 bot successfully!', 'success');
+                } else {
+                    showAlert('❌ Failed to send test detection: ' + data.message, 'danger');
+                }
+            } catch (error) {
+                showAlert('❌ Error sending test detection: ' + error.message, 'danger');
+            } finally {
+                button.textContent = originalText;
+                button.disabled = false;
+            }
+        }
+
+        function showAlert(message, type) {
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type}`;
+            alert.textContent = message;
+            
+            const container = document.querySelector('.container');
+            container.insertBefore(alert, container.firstChild);
+            
+            setTimeout(() => {
+                alert.style.opacity = '0';
+                setTimeout(() => alert.remove(), 300);
+            }, 5000);
+        }
+
+        // File upload handling
+        const fileInput = document.getElementById('file-input');
+        const uploadArea = document.getElementById('upload-area');
+        const uploadForm = document.getElementById('upload-form');
+
+        fileInput.addEventListener('change', handleFileSelect);
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                fileInput.files = files;
+                handleFileSelect();
+            }
+        });
+
+        async function handleFileSelect() {
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            // Validate file type
+            if (!file.type.startsWith('image/')) {
+                showAlert('❌ Please select a valid image file', 'danger');
+                return;
+            }
+
+            // Validate file size (10MB limit)
+            if (file.size > 10 * 1024 * 1024) {
+                showAlert('❌ File size too large. Please select an image smaller than 10MB', 'danger');
+                return;
+            }
+
+            // Update UI to show processing
+            const uploadContent = document.getElementById('upload-content');
+            uploadContent.innerHTML = '<div class="loading"></div><p>Analyzing image...</p>';
+
+            const formData = new FormData();
+            formData.append('image', file);
+
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    displayResults(data);
+                    totalDetections += data.total_detections;
+                    document.getElementById('total-detections').textContent = `Total Detections: ${totalDetections}`;
+                    
+                    if (data.total_detections > 0) {
+                        showAlert(`🎯 ${data.total_detections} military targets detected and sent to ESP32 bot!`, 'success');
+                    } else {
+                        showAlert('✅ Analysis complete. No military targets detected.', 'success');
+                    }
+                } else {
+                    showAlert('❌ ' + data.error, 'danger');
+                }
+            } catch (error) {
+                showAlert('❌ Upload failed: ' + error.message, 'danger');
+            } finally {
+                // Reset upload area
+                resetUploadArea();
+            }
+        }
+
+        function resetUploadArea() {
+            const uploadContent = document.getElementById('upload-content');
+            uploadContent.innerHTML = `
+                <p>📁 Click to select image</p>
+                <p>or drag and drop here</p>
+                <button type="button" class="upload-btn" onclick="document.getElementById('file-input').click()">
+                    Choose Image
+                </button>
+            `;
+            fileInput.value = '';
+        }
+
+        function displayResults(data) {
+            const resultsContainer = document.getElementById('results-container');
+            const previewContainer = document.getElementById('preview-container');
+            const previewImage = document.getElementById('preview-image');
+            const detectionStats = document.getElementById('detection-stats');
+            
+            // Clear previous results
+            resultsContainer.innerHTML = '';
+            detectionStats.innerHTML = '';
+            
+            // Show preview image
+            if (data.preview_img) {
+                previewImage.src = 'data:image/jpeg;base64,' + data.preview_img;
+                previewContainer.style.display = 'block';
+            }
+            
+            // Display detection results
+            const detectionCounts = {};
+            let hasDetections = false;
+            
+            Object.keys(data.results).forEach(detectionType => {
+                const detections = data.results[detectionType];
+                if (detections.length > 0) {
+                    hasDetections = true;
+                    detectionCounts[detectionType] = detections.length;
+                    
+                    const resultDiv = document.createElement('div');
+                    resultDiv.className = `detection-result ${detectionType}`;
+                    
+                    resultDiv.innerHTML = `
+                        <h4>${detections[0].detection_type} (${detections.length} detected)</h4>
+                        ${detections.map(det => 
+                            `<p>• ${det.class} - Confidence: ${(det.confidence * 100).toFixed(1)}%</p>`
+                        ).join('')}
+                    `;
+                    
+                    resultsContainer.appendChild(resultDiv);
+                }
+            });
+            
+            if (!hasDetections) {
+                resultsContainer.innerHTML = '<p style="text-align: center; opacity: 0.7;">No military targets detected in this image.</p>';
+            }
+            
+            // Update detection statistics
+            Object.keys(detectionCounts).forEach(type => {
+                const statDiv = document.createElement('div');
+                statDiv.className = 'stat-item';
+                statDiv.innerHTML = `
+                    <div class="stat-number">${detectionCounts[type]}</div>
+                    <div>${type.replace('_', ' ').toUpperCase()}</div>
+                `;
+                detectionStats.appendChild(statDiv);
+            });
+            
+            // Highlight active model cards
+            document.querySelectorAll('.model-card').forEach(card => {
+                card.classList.remove('active');
+            });
+            
+            Object.keys(detectionCounts).forEach(type => {
+                const modelCard = document.querySelector(`.model-card:nth-child(${getModelCardIndex(type)})`);
+                if (modelCard) {
+                    modelCard.classList.add('active');
+                }
+            });
+        }
+        
+        function getModelCardIndex(detectionType) {
+            const mapping = {
+                'soldier_detection': 1,
+                'landmine_detection': 2,
+                'aircraft_detection': 3,
+                'tank_detection': 4,
+                'gun_detection': 5,
+                'military_equipment': 6
+            };
+            return mapping[detectionType] || 1;
+        }
+
+        // Add keyboard support
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                resetUploadArea();
+            }
+        });
+    </script>
+</body>
+</html>
