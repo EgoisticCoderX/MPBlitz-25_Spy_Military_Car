@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 Military Detection Live Stream</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            margin: 0;
+            padding: 20px;
+            color: white;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 30px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #fff;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+        
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(45deg, #4CAF50, #45a049);
+            color: white;
+        }
+        
+        .btn-danger {
+            background: linear-gradient(45deg, #f44336, #da190b);
+            color: white;
+        }
+        
+        .btn-secondary {
+            background: linear-gradient(45deg, #2196F3, #0b7dda);
+            color: white;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+        
+        .stream-container {
+            text-align: center;
+            margin: 30px 0;
+            position: relative;
+        }
+        
+        #videoStream {
+            max-width: 100%;
+            height: auto;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            border: 3px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .settings-panel {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            display: none;
+        }
+        
+        .settings-row {
+            display: flex;
+            align-items: center;
+            margin: 15px 0;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .settings-row label {
+            min-width: 200px;
+            font-weight: bold;
+        }
+        
+        .settings-row input[type="number"], .settings-row input[type="range"] {
+            padding: 8px 12px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            flex: 1;
+            max-width: 200px;
+        }
+        
+        .status {
+            text-align: center;
+            margin: 20px 0;
+            padding: 10px;
+            border-radius: 8px;
+            font-weight: bold;
+        }
+        
+        .status.success {
+            background: rgba(76, 175, 80, 0.3);
+            border: 1px solid #4CAF50;
+        }
+        
+        .status.error {
+            background: rgba(244, 67, 54, 0.3);
+            border: 1px solid #f44336;
+        }
+        
+        .status.info {
+            background: rgba(33, 150, 243, 0.3);
+            border: 1px solid #2196F3;
+        }
+        
+        .models-legend {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        
+        .model-item {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 4px solid #fff;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .stream-info {
+            text-align: center;
+            margin: 10px 0;
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.8);
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+            }
+            .controls {
+                flex-direction: column;
+                align-items: center;
+            }
+            .btn { width: 200px; }
+            .settings-row { flex-direction: column; align-items: flex-start; }
+            .settings-row input { width: 100%; max-width: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🛡️ ESP32 Military Detection System</h1>
+        
+        <div class="controls">
+            <input type="text" id="esp32Url" placeholder="ESP32 IP (e.g., 192.168.1.100)" 
+                   value="192.168.29.177" style="padding: 12px; border-radius: 8px; border: 1px solid #ccc; width: 200px; color: black;">
+            <button class="btn btn-primary" onclick="startStream()">🚀 Start Stream</button>
+            <button class="btn btn-danger" onclick="stopStream()">⏹️ Stop Stream</button>
+            <button class="btn btn-secondary" onclick="toggleSettings()">⚙️ Settings</button>
+        </div>
+        
+        <div id="statusMessage" class="status info" style="display: none;"></div>
+        
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Processing stream...</p>
+        </div>
+        
+        <div class="settings-panel" id="settingsPanel">
+            <h3>Performance & Device Settings</h3>
+            
+            <!-- Performance Settings -->
+            <div class="settings-row">
+                <label for="detectionInterval">Detection Interval (seconds):</label>
+                <input type="number" id="detectionInterval" value="1.0" step="0.1" min="0.1" max="5.0">
+            </div>
+            <div class="settings-row">
+                <label for="frameSkip">Frame Skip (process every Nth frame):</label>
+                <input type="number" id="frameSkip" value="3" min="1" max="10">
+                <button class="btn btn-secondary" onclick="updateSettings()">Update</button>
+            </div>
+            
+            <!-- NEW: Flashlight Control -->
+            <div class="settings-row">
+                <label for="brightnessSlider">Flashlight Brightness:</label>
+                <input type="range" id="brightnessSlider" min="0" max="255" value="0" step="1" onchange="setBrightness(this.value)">
+                <span id="brightnessValue">0</span>
+            </div>
+
+            <p style="font-size: 14px; color: rgba(255, 255, 255, 0.7);">
+                Adjust settings to balance performance and detection accuracy.
+            </p>
+        </div>
+        
+        <div class="stream-container">
+            <img id="videoStream" src="" alt="Live Stream" style="display: none;">
+            <div class="stream-info" id="streamInfo">
+                Click "Start Stream" to begin live detection
+            </div>
+        </div>
+        
+        <div class="models-legend">
+            {% for key, model in models.items() %}
+          <div class="model-item" style="border-left-color: rgb({{ model.color|join(',') }});">
+                <h4>{{ model.name }}</h4>
+                <p>Confidence: {{ model.conf }}</p>
+                <p>Models: {{ model.models|length }}</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <script>
+        let streamActive = false;
+        
+        function showStatus(message, type = 'info', duration = 5000) {
+            const statusEl = document.getElementById('statusMessage');
+            statusEl.textContent = message;
+            statusEl.className = `status ${type}`; //statusEl.className = `status {type}`;
+            statusEl.style.display = 'block';
+            if(duration > 0) {
+                setTimeout(() => { statusEl.style.display = 'none'; }, duration);
+            }
+        }
+        
+        function showLoading(message) {
+            document.getElementById('loading').querySelector('p').textContent = message;
+            document.getElementById('loading').style.display = 'block';
+        }
+        
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+        }
+        
+        async function startStream() {
+            if (streamActive) {
+                showStatus('Stream is already active. Please stop it first.', 'info');
+                return;
+            }
+
+            const esp32Url = document.getElementById('esp32Url').value.trim();
+            if (!esp32Url || !/^(\d{1,3}\.){3}\d{1,3}$/.test(esp32Url)) {
+                showStatus('Please enter a valid ESP32 IP address', 'error');
+                return;
+            }
+            
+            showLoading('Starting stream...');
+            
+            try {
+                const response = await fetch('/start_stream', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ esp32_url: `http://${esp32Url}` })
+                });
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    streamActive = true;
+                    const videoEl = document.getElementById('videoStream');
+                    videoEl.src = '/video_feed?' + new Date().getTime(); // Bust cache
+                    videoEl.style.display = 'block';
+                    document.getElementById('streamInfo').textContent = 'Stream active. Connecting...';
+                    showStatus('Stream started successfully!', 'success');
+                } else {
+                    showStatus(`Failed to start stream: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`Error starting stream: ${error.message}`, 'error');
+            } finally {
+                hideLoading();
+            }
+        }
+        
+        async function stopStream() {
+            if (!streamActive) {
+                showStatus('Stream is not active.', 'info');
+                return;
+            }
+            showLoading('Stopping stream...');
+            
+            try {
+                const response = await fetch('/stop_stream', { method: 'POST' });
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    streamActive = false;
+                    const videoEl = document.getElementById('videoStream');
+                    videoEl.style.display = 'none';
+                    videoEl.src = ''; // Clear source
+                    document.getElementById('streamInfo').textContent = 'Stream stopped.';
+                    showStatus('Stream stopped successfully!', 'success');
+                } else {
+                    showStatus(`Failed to stop stream: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`Error stopping stream: ${error.message}`, 'error');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        async function updateSettings() {
+            const detectionInterval = document.getElementById('detectionInterval').value;
+            const frameSkip = document.getElementById('frameSkip').value;
+            showStatus('Updating settings...', 'info');
+            try {
+                const response = await fetch('/update_detection_settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        detection_interval: parseFloat(detectionInterval),
+                        frame_skip: parseInt(frameSkip)
+                    })
+                });
+                const result = await response.json();
+                if (result.status === 'success') {
+                    showStatus('Settings updated!', 'success');
+                } else {
+                    showStatus(`Failed to update settings: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`Error updating settings: ${error.message}`, 'error');
+            }
+        }
+
+        /**
+        * NEW: Function to control the ESP32 flashlight
+        */
+        async function setBrightness(value) {
+            document.getElementById('brightnessValue').textContent = value;
+            const esp32Url = document.getElementById('esp32Url').value.trim();
+             if (!esp32Url) {
+                showStatus('ESP32 IP must be set to control brightness', 'error');
+                return;
+            }
+            try {
+                await fetch('/set_brightness', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        esp32_url: `http://${esp32Url}`,
+                        level: parseInt(value)
+                    })
+                });
+            } catch (error) {
+                 showStatus(`Error setting brightness: ${error.message}`, 'error');
+            }
+        }
+
+        function toggleSettings() {
+            const panel = document.getElementById('settingsPanel');
+            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        }
+        
+        // Handle stream image errors
+        document.getElementById('videoStream').onerror = function() {
+            if (streamActive) {
+                showStatus('Stream connection failed. Check console and ESP32 IP.', 'error', 0);
+                this.style.display = 'none';
+                streamActive = false; // Prevent repeated errors
+            }
+        };
+
+        // Handle page unload to stop the stream
+        window.addEventListener('beforeunload', () => {
+            if (streamActive) {
+                navigator.sendBeacon('/stop_stream');
+            }
+        });
+    </script>
+</body>
+</html>
