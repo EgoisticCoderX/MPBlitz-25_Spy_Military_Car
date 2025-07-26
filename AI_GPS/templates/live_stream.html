@@ -1,0 +1,113 @@
+<!-- Filename: templates/live_stream.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 Detection System</title>
+    <style>
+        body, html { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #1e3c72; margin: 0; padding: 20px; color: white; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { text-align: center; margin-bottom: 20px; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); }
+        .stream-container { position: relative; text-align: center; margin-bottom: 20px; min-height: 480px; background-color: #000; border-radius: 15px; }
+        #videoStream { width: 100%; max-width: 800px; border-radius: 15px; }
+        .control-panel { display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; padding: 20px; background: rgba(0,0,0,0.3); border-radius: 10px; align-items: center; }
+        .control-group { display: flex; flex-direction: column; align-items: center; }
+        .control-group label { font-weight: 700; margin-bottom: 5px; }
+        select, .btn { padding: 12px 20px; border: none; border-radius: 8px; font-size: 16px; font-weight: 700; cursor: pointer; transition: all .3s ease; }
+        .btn:hover:enabled { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: #4CAF50; color: #fff; }
+        .btn-danger { background: #f44336; color: #fff; }
+        .btn-secondary { background: #007bff; color: white; }
+        .btn-continue { background: #fff; color: #000; font-weight: bold; }
+        #threat-banner { display: none; position: absolute; bottom: 30px; left: 0; right: 0; margin: auto; width: 95%; max-width: 760px; background: linear-gradient(45deg, rgba(204,0,0,0.9), rgba(255,68,68,0.9)); padding: 10px; z-index: 100; text-align: center; border-top: 3px solid white; border-radius: 12px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+        #threat-banner h3 { margin: 0; } #threat-banner p { margin: 5px 0 10px 0; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🛡️ ESP32 Military Detection System</h1>
+        <div class="stream-container">
+            <img id="videoStream" alt="Live Stream">
+            <div id="threat-banner">
+                <h3>🚨 THREAT DETECTED! 🚨</h3>
+                <p>Stream paused. Image and location saved to captures.</p>
+                <button class="btn btn-continue" onclick="resumeStream()">CONTINUE</button>
+            </div>
+        </div>
+        <div class="control-panel">
+            <button class="btn btn-primary" id="startBtn" onclick="startStream()">START</button>
+            <button class="btn btn-danger" id="stopBtn" onclick="stopStream()" disabled>STOP</button>
+            <button class="btn btn-secondary" id="capturesBtn" onclick="viewCaptures()" disabled>View Captures</button>
+            <div class="control-group">
+                <label for="modelSelect">Target</label>
+                <select id="modelSelect" onchange="setActiveModel()">
+                    <option value="all">🎯 All Threats</option>
+                    {% for key, model in models.items() %}
+                        <option value="{{ key }}">{{ model.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="control-group">
+                <label>💡 Flashlight</label>
+                <input type="range" id="brightnessSlider" min="0" max="255" value="0" onchange="setBrightness(this.value)">
+            </div>
+        </div>
+    </div>
+    <script>
+        const startBtn = document.getElementById('startBtn'), stopBtn = document.getElementById('stopBtn'), capturesBtn = document.getElementById('capturesBtn'), banner = document.getElementById('threat-banner');
+        let statusCheckInterval = null;
+
+        document.addEventListener("DOMContentLoaded", () => {
+            document.getElementById('videoStream').src = `/video_feed?t=${Date.now()}`;
+        });
+
+        function updateSystemState(state) {
+            const isOffline = (state === 'OFFLINE');
+            startBtn.disabled = !isOffline;
+            stopBtn.disabled = isOffline;
+            capturesBtn.disabled = isOffline;
+            banner.style.display = (state === 'PAUSED_FOR_CONFIRMATION') ? 'block' : 'none';
+        }
+
+        async function apiRequest(endpoint, options={}) {
+            const response = await fetch(endpoint, options);
+            if (!response.ok) {
+                const err = await response.json().catch(()=>({message:"Request failed"}));
+                throw new Error(err.message);
+            }
+            return response.json();
+        }
+
+        async function startStream() {
+            try {
+                updateSystemState('CONNECTING');
+                await apiRequest('/start_stream', {method: 'POST'});
+                startStatusPolling();
+            } catch (error) { console.error("Start failed:", error); updateSystemState('OFFLINE'); }
+        }
+        async function stopStream() {
+            stopStatusPolling();
+            try { await apiRequest('/stop_stream', {method: 'POST'}); }
+            catch (error) { console.error("Stop failed:", error); }
+            updateSystemState('OFFLINE');
+        }
+        function viewCaptures() { window.open('/captures', '_blank'); }
+        async function setActiveModel() { try { await apiRequest('/set_active_model',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model_key:document.getElementById('modelSelect').value})}); } catch(e){} }
+        async function setBrightness(level) { try { await apiRequest('/set_brightness',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({level:level})}); } catch(e){} }
+        async function resumeStream() { try { await apiRequest('/resume_stream', {method: 'POST'}); } catch (error) {} }
+        function startStatusPolling() {
+            stopStatusPolling();
+            statusCheckInterval = setInterval(async () => {
+                try {
+                    const data = await apiRequest('/get_status');
+                    updateSystemState(data.state);
+                    if (data.state === 'OFFLINE') stopStatusPolling();
+                } catch (error) { updateSystemState('OFFLINE'); }
+            }, 1500);
+        }
+        function stopStatusPolling() { if(statusCheckInterval) clearInterval(statusCheckInterval); statusCheckInterval = null; }
+    </script>
+</body>
+</html>
