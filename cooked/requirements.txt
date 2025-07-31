@@ -1,0 +1,7 @@
+# Filename: requirements.txt
+flask
+requests
+python-dotenv
+opencv-python-headless
+numpy
+google-generativeai

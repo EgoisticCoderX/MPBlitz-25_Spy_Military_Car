@@ -1,0 +1,163 @@
+<!-- Filename: templates/live_stream.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tactical Detection System</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        :root { --bg: #121212; --panel: #1e1e1e; --border: #333; --green: #28a745; --red: #dc3545; --blue: #007bff; --yellow: #ffc107; --text: #e0e0e0; }
+        body, html { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; height: 100vh; display: flex; flex-direction: column; }
+        .header { background: var(--panel); text-align: center; padding: 10px; border-bottom: 2px solid var(--border); flex-shrink: 0; }
+        .header h1 { margin: 0; font-size: 1.4rem; color: var(--green); }
+        .main-container { flex-grow: 1; display: flex; overflow: hidden; padding: 15px; gap: 15px; }
+        .left-panel { flex: 3; display: flex; flex-direction: column; gap: 15px; min-width: 300px; }
+        .right-panel { flex: 1; display: flex; flex-direction: column; gap: 15px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 20px; min-width: 250px; }
+        .stream-container { position: relative; width: 100%; flex-grow: 1; background: #000; border-radius: 8px; overflow: hidden; min-height: 200px; }
+        #videoStream { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+        #overlay { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; background: rgba(0,0,0,0.7); flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+        #overlay h3 { margin: 0 0 10px; font-size: clamp(1.5rem, 5vw, 2.5rem); animation: pulse 1.5s infinite; }
+        #overlay p { margin: 0 0 20px; }
+        #status-bar { position: absolute; bottom: 0; left: 0; width: 100%; padding: 8px; z-index: 5; text-align: center; font-weight: bold; color: black; }
+        @keyframes pulse { 0% { color: var(--red); } 50% { color: white; } 100% { color: var(--red); } }
+        .control-box { background: var(--panel); padding: 20px; border-radius: 8px; border: 1px solid var(--border); }
+        h2 { margin-top: 0; border-bottom: 1px solid var(--border); padding-bottom: 10px; font-size: 1.2rem; }
+        .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .btn { padding: 12px; border-radius: 5px; border: none; font-size: 1em; font-weight: bold; cursor: pointer; transition: background 0.2s; width: 100%; box-sizing: border-box; }
+        .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .btn-start { background: var(--green); color: white; } .btn-start:hover:enabled { background: #218838; }
+        .btn-stop { background: var(--red); color: white; } .btn-stop:hover:enabled { background: #c82333; }
+        .btn-resume { background: var(--blue); color: white; grid-column: span 2; } .btn-resume:hover:enabled { background: #0069d9; }
+        .slider-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-top: 20px; }
+        .slider-group { display: flex; flex-direction: column; gap: 5px; }
+        input[type="range"] { width: 100%; }
+        #map { height: 250px; border-radius: 8px; background-color: #333; }
+    </style>
+</head>
+<body>
+    <header class="header"><h1>🛡️ Tactical Detection & Surveillance System</h1></header>
+    <main class="main-container">
+        <div class="left-panel">
+            <div class="stream-container">
+                <div id="status-bar">SYSTEM OFFLINE</div>
+                <img id="videoStream" alt="Video Stream">
+                <div id="overlay">
+                    <h3>🚨 THREAT CONFIRMED 🚨</h3>
+                    <p id="threat-details">Threat details here...</p>
+                    <button class="btn btn-resume" onclick="resumeStream()" style="width: auto; padding: 10px 30px;">MANUAL OVERRIDE & RESUME</button>
+                </div>
+            </div>
+            <div class="control-box">
+                <h2>SYSTEM & CAMERA CONTROLS</h2>
+                <div class="btn-grid">
+                    <button class="btn btn-start" id="startBtn" onclick="startStream()">▶ START</button>
+                    <button class="btn btn-stop" id="stopBtn" onclick="stopStream()">■ STOP</button>
+                </div>
+                <div class="slider-grid">
+                    <div class="slider-group"><label for="pan">Pan</label><input type="range" id="pan" min="0" max="180" value="90"></div>
+                    <div class="slider-group"><label for="tilt">Tilt</label><input type="range" id="tilt" min="0" max="180" value="90"></div>
+                    <div class="slider-group"><label for="flashlight">Flashlight</label><input type="range" id="flashlight" min="0" max="255" value="0"></div>
+                </div>
+            </div>
+        </div>
+        <aside class="right-panel">
+            <h2>EVENT MAP</h2>
+            <div id="map"></div>
+            <h2>ARCHIVES</h2>
+            <button class="btn btn-resume" onclick="window.open('/captures', '_blank')">VIEW CAPTURES</button>
+        </aside>
+    </main>
+
+    <script>
+        // DOM Elements are the same
+        const startBtn = document.getElementById('startBtn'), stopBtn = document.getElementById('stopBtn');
+        const statusBar = document.getElementById('status-bar'), overlay = document.getElementById('overlay');
+        const threatDetailsEl = document.getElementById('threat-details');
+        const panSlider = document.getElementById('pan'), tiltSlider = document.getElementById('tilt'), flashSlider = document.getElementById('flashlight');
+        let statusInterval = null;
+        let map, marker;
+        const DETECTION_MODELS = [{"id": "pistol-fire-and-gun/1", "name": "Pistol/Gun Fire"}, {"id": "gun-and-weapon-detection/1", "name": "Weapon Detection v1"}, {"id": "knife-and-gun-modelv2/2", "name": "Knife/Gun v2"}, {"id": "military-f5tbj/1", "name": "Military Equipment"}, {"id": "weapon-detection-ssvfk/1", "name": "Weapon Detection v2"}, {"id": "gun-d8mga/2", "name": "Gun Model v2"}];
+
+        document.addEventListener("DOMContentLoaded", () => {
+            map = L.map('map').setView([20, 0], 2);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }).addTo(map);
+            updateVideoStream();
+            setSystemState({state: 'OFFLINE'});
+            addEventListeners();
+        });
+
+        function addEventListeners() {
+            const throttledSend = (func, limit) => { let inThrottle; return function() { if (!inThrottle) { func.apply(this, arguments); inThrottle = true; setTimeout(() => inThrottle = false, limit); } } };
+            const sendControlThrottled = throttledSend((action, value) => sendControl(action, value), 100);
+            panSlider.addEventListener('input', () => sendControlThrottled('pan', panSlider.value));
+            tiltSlider.addEventListener('input', () => sendControlThrottled('tilt', tiltSlider.value));
+            flashSlider.addEventListener('input', () => sendControlThrottled('flashlight', flashSlider.value));
+        }
+
+        async function apiRequest(url, options = {}) {
+            const response = await fetch(url, options).catch(e => { console.error(`API Request Failed for ${url}:`, e); throw e; });
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            return await response.json();
+        }
+
+        function updateVideoStream() { document.getElementById('videoStream').src = `/video_feed?t=${Date.now()}`; }
+
+        function setSystemState(data) {
+            const state = data.state;
+            startBtn.disabled = state !== 'OFFLINE';
+            stopBtn.disabled = state === 'OFFLINE';
+            let statusText = "SYSTEM OFFLINE"; let bgColor = "var(--red)";
+
+            switch(state) {
+                case "STREAMING": statusText = "LIVE: MONITORING"; bgColor = "var(--green)"; overlay.style.display = 'none'; break;
+                case "VERIFYING": statusText = "CANDIDATE DETECTED: VERIFYING WITH AI..."; bgColor = "var(--yellow)"; overlay.style.display = 'none'; break;
+                case "PAUSED":
+                    statusText = "THREAT CONFIRMED - STREAM PAUSED"; bgColor = "var(--red)"; overlay.style.display = 'flex';
+                    const threats = data.threats ? data.threats.map(id => (DETECTION_MODELS.find(m => m.id === id) || {name: 'Unknown'}).name).join(', ') : 'Unknown Threat';
+                    threatDetailsEl.textContent = `Triggered by: ${threats}`;
+                    if (marker) map.removeLayer(marker);
+                    if (data.location && data.location.lat) {
+                        const latlng = [data.location.lat, data.location.lon];
+                        map.setView(latlng, 16);
+                        marker = L.marker(latlng).addTo(map).bindPopup(`<b>Threat Confirmed</b>`).openPopup();
+                    }
+                    break;
+            }
+            statusBar.textContent = statusText; statusBar.style.backgroundColor = bgColor;
+        }
+        
+        async function startStream() {
+            setSystemState({state: "CONNECTING"}); // Provide immediate feedback
+            try { await apiRequest('/start_stream', {method: 'POST'}); updateVideoStream(); startStatusPolling(); } catch (e) { setSystemState({state: 'OFFLINE'}); }
+        }
+
+        async function stopStream() {
+            stopStatusPolling();
+            try { await apiRequest('/stop_stream', {method: 'POST'}); } finally { setSystemState({state: 'OFFLINE'}); updateVideoStream(); }
+        }
+
+        async function resumeStream() {
+            if(marker) map.removeLayer(marker);
+            await apiRequest('/resume_stream', {method: 'POST'});
+        }
+
+        function sendControl(action, value) {
+            if (stopBtn.disabled) return;
+            apiRequest('/control', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ action, value })}).catch(()=>{});
+        }
+        
+        function startStatusPolling() {
+            stopStatusPolling();
+            statusInterval = setInterval(async () => {
+                try {
+                    const data = await apiRequest('/get_status');
+                    setSystemState(data);
+                } catch(e) { console.error("Status poll failed."); stopStream(); }
+            }, 1000);
+        }
+        function stopStatusPolling() { clearInterval(statusInterval); statusInterval = null; }
+    </script>
+</body>
+</html>
